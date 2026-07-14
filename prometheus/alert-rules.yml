@@ -1,0 +1,47 @@
+groups:
+  - name: connection_pool_alerts
+    rules:
+      # Очередь у входа в бар. pending > 0 дольше минуты - потоки ждут
+      # соединений. Это предвестник: пользователи уже чувствуют задержки.
+      - alert: ConnectionPoolPending
+        expr: hikaricp_connections_pending{pool="TodoHikariPool"} > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Threads are waiting for DB connections"
+          description: "{{ $value }} thread(s) waiting on pool {{ $labels.pool }}"
+
+      # Кому-то уже отказали: поток ждал connection-timeout и получил
+      # SQLTransientConnectionException. Это не предвестник, это инцидент.
+      - alert: ConnectionTimeouts
+        expr: increase(hikaricp_connections_timeout_total{pool="TodoHikariPool"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Connection pool timeouts detected"
+          description: "{{ $value }} connection timeout(s) in the last 5 minutes"
+
+      # Соединения используются подозрительно долго: медленные транзакции
+      # или утечки. Среднее время удержания соединения > 1 секунды.
+      - alert: LongConnectionUsage
+        expr: |
+          rate(hikaricp_connections_usage_seconds_sum{pool="TodoHikariPool"}[5m])
+          /
+          rate(hikaricp_connections_usage_seconds_count{pool="TodoHikariPool"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Connections are held longer than 1s on average"
+
+  - name: application_alerts
+    rules:
+      - alert: ApplicationDown
+        expr: up{job="todo-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Application is down"

@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: todo-transactions-demo
+
+  datasource:
+    # 55432 - порт Postgres из docker-compose (см. проброс портов там же)
+    url: jdbc:postgresql://localhost:55432/todo
+    username: todo
+    password: todo
+    hikari:
+      pool-name: TodoHikariPool
+      # 5 соединений - намеренно маленький пул, чтобы "преступления"
+      # воспроизводились за секунды, а не под нагрузкой в тысячи RPS.
+      maximum-pool-size: 5
+      minimum-idle: 2
+      # Fail fast: если соединения нет 5 секунд - исключение, а не вечное
+      # ожидание. Дефолтные 30 секунд превращают исчерпанный пул
+      # в "приложение просто висит".
+      connection-timeout: 5000
+      # Главный свидетель по делу об утечках: если соединение не вернули
+      # за 10 секунд, Hikari пишет WARN со stack trace того, кто его взял.
+      leak-detection-threshold: 10000
+
+  jpa:
+    # По умолчанию Spring Boot держит OSIV включённым. Это один из
+    # фигурантов дела - см. эпизод про "дворецкого". Выключаем.
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+demo:
+  # Задержка "внешней системы" для эпизода про медленную транзакцию
+  external-delay-ms: 5000
+
+logging:
+  level:
+    # Раскомментируйте, чтобы видеть открытие/коммит каждой транзакции:
+    # org.springframework.orm.jpa.JpaTransactionManager: DEBUG
+    com.zaxxer.hikari: INFO
