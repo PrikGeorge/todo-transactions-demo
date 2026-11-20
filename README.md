@@ -111,7 +111,10 @@ curl -X POST "http://localhost:8080/api/crime/deadlock-fixed?idA=1&idB=2"
 # внутри - аудит с REQUIRES_NEW, которому нужно ВТОРОЕ соединение.
 # Все пять внешних держат по столику, все пять внутренних ждут второго.
 curl -X POST "http://localhost:8080/api/crime/requires-new?robbers=5"
-# ~5 секунд - и все пятеро "погиб: Connection is not available..."
+# ~5 секунд - и обычно 3-5 из 5 "погиб: Connection is not available..."
+# по connection-timeout. 1-2 потока могут выжить: когда первый упавший
+# откатывает внешнюю транзакцию, его коннект успевает подхватить сосед,
+# у которого таймаут ещё не истёк.
 
 curl -X POST "http://localhost:8080/api/crime/requires-new-fixed?robbers=5"
 # все выжили: аудит идёт отдельной транзакцией ПОСЛЕ основной
@@ -135,8 +138,14 @@ curl http://localhost:8080/api/crime/osiv-fixed/1
 ## Диагностика
 
 ```bash
-# Thread dump: кто ждёт соединения
-docker exec todo-tx-app jstack 1 | grep -A 3 "HikariPool.getConnection"
+# Thread dump без JDK-утилит (в eclipse-temurin:17-jre-alpine нет jstack):
+# JVM получает SIGQUIT и печатает дамп в stdout контейнера
+docker exec todo-tx-app kill -3 1
+docker logs todo-tx-app
+
+# Thread dump в отдельный файл: соседний JDK-контейнер в том же PID-неймспейсе
+docker run --rm --pid=container:todo-tx-app --user 1001:1001 \
+  eclipse-temurin:17-jdk jstack 1 > threads.txt
 
 # Показания базы: кто держит транзакции
 docker exec -it todo-postgres psql -U todo -d todo -c \

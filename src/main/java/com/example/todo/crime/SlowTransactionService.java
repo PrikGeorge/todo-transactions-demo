@@ -40,11 +40,14 @@ public class SlowTransactionService {
 
     // Как надо: транзакция ровно вокруг работы с БД.
     // TransactionTemplate делает границы явными и узкими.
-    // Внешний вызов - после коммита, соединение уже возвращено в пул.
+    // Внешний вызов - после коммита. Но соединение возвращается в пул
+    // сразу после коммита ТОЛЬКО при spring.jpa.open-in-view: false.
+    // При включённом OSIV (true) Hibernate в режиме DELAYED_ACQUISITION_AND_HOLD
+    // держит коннект до конца HTTP-запроса - включая эти 5 секунд.
     public Task createAndNotifyFixed(String title) {
         Task saved = transactionTemplate.execute(status ->
                 taskRepository.save(new Task(title)));
-        externalClient.notifyExternalSystem(saved);  // <- соединение уже в пуле
+        externalClient.notifyExternalSystem(saved);  // <- коннект в пуле, если OSIV выключен
         return saved;
     }
 }

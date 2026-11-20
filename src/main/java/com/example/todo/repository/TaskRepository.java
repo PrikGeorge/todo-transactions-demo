@@ -20,6 +20,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     // Fetch join: комментарии загружаются в ТОЙ ЖЕ транзакции одним
     // запросом. Правильная альтернатива надежде на OSIV.
-    @Query("select distinct t from Task t left join fetch t.comments where t.id = :id")
+    @Query("select t from Task t left join fetch t.comments where t.id = :id")
     Optional<Task> findWithCommentsById(@Param("id") Long id);
 }
